@@ -1,0 +1,163 @@
+---
+title: "Exploring the BRFSS data"
+output: 
+  html_document: 
+    fig_height: 4
+    highlight: pygments
+    theme: spacelab
+---
+
+## Setup
+
+### Load packages
+
+```{r load-packages, message = FALSE}
+library(ggplot2)
+library(dplyr)
+```
+
+### Load data
+
+The data used for this research is Behavioral Risk Factor Surveillance System (BRFSS) for year 2013. More information about the data could be found at http://www.cdc.gov/brfss/
+
+```{r load-data BRFSS}
+load("brfss2013.RData")
+```
+
+* * *
+
+## Part 0: Question in mind
+In this research we will try to find if a relation exist between education level of an individual and chronic diseases. We will primarily be considering three diseases :
+
+- Heart Related Chronic Diseases(HRCD) which includes
+    + High Blood Pressure
+    + Heart Attack
+    + Angina or Coronary Heart Disease
+- Cancer
+    + Skin Cancer
+    + Any other type of Cancer
+- Depressive disorder
+
+The reasoning behind choosing a demographic variable like education level for this research is to look if better awareness towards the diseases has any impact on the occurrence of these diseases. It is assumed that a better education level would imply better awareness towards the risk factors that contribute towards these diseases as well as better knowledge of mitigating them.
+
+Since all the results will come from a random sample, they would be generalizable. But, since this is not a controlled experiment we cannot derive causation relationship between variables.
+
+## Part 1: Data
+The variable "bphigh4" has 4 levels excluding NA. For our analysis everything other than "Yes" should be grouped as "no". Hence, we create a new variable "hbp" with yes and no as levels. 
+```{r HBP}
+brfss2013 <- brfss2013 %>%
+  mutate(hbp = ifelse(bphigh4=="Yes", "yes","no"))
+
+brfss2013 %>% group_by(hbp) %>% summarize(count=n())
+```
+We now create the variable HRCD which has value "yes" if an individual has either one of the three conditions - high blood pressure, ever had heart attack or angina.
+```{r HRCD}
+brfss2013 <- brfss2013 %>%
+  mutate(HRCD = ifelse(hbp == "yes" | cvdinfr4 == "Yes" | cvdcrhd4 == "Yes", "yes","no"))
+brfss2013 %>% group_by(HRCD) %>% summarize(count=n())
+```
+Note that the above variable HRCD has a value "yes" if any of the three variables, hbp, cvdinfr4 or cvdcrhd4 has a value of yes but it has a value NA if at least one of the three is NA and none of the remaining is "yes".
+```{r}
+brfss2013 %>% group_by(hbp,cvdinfr4,cvdcrhd4,HRCD) %>% summarize(count=n())
+```
+We also create a variable HC which holds a value "yes" if either of the variable CHCSCNCR or CHCOCNCR holds a value of "yes", i.e. if the person ever had or has skin or any other type of cancer.
+```{r HC}
+brfss2013 <- brfss2013 %>% 
+  mutate(HC=ifelse(chcscncr == "Yes" | chcocncr == "Yes","yes","no"))
+brfss2013 %>% group_by(chcscncr,chcocncr,HC) %>% summarize(count=n())
+brfss2013 %>% group_by(HC) %>% summarize(count=n())
+```
+We also create new variable for plotting purpose that, for each education level, count of individuals who had or didn't have Chronic diseases. For visualization purpose, we also develop an Education Level Index :
+
+- Ed Lev. 1 -> Never attended school or only kindergarten
+- Ed Lev. 2 -> Grades 1 through 8 (Elementary)
+- Ed Lev. 3 -> Grades 9 though 11 (Some high school)
+- Ed Lev. 4 -> Grade 12 or GED (High school graduate)
+- Ed Lev. 5 -> College 1 year to 3 years (Some college or technical school)
+- Ed Lev. 6 -> College 4 years or more (College graduate)
+
+These will be used as categories in the plots.
+
+* * *
+
+## Part 2: Research questions
+
+**Research quesion 1:**
+Question 1 is related to exploring relation between education level of people and their chances of developing heart related diseases. 
+
+**Research quesion 2:**
+Question 2 is about exploring relation between education levels of people and their chances of developing cancer. If there is any correlation between different educational section of society and their chances of developing cancer.
+
+**Research quesion 3:**
+Question 3 explores the same relation with depressive disorder. If there is a certain section of society, divided based on education levels, that is more prone to depressive disorders or is there a correlation between education level and depressive disorder.
+
+
+* * *
+
+## Part 3: Exploratory data analysis
+
+
+**Research quesion 1:**
+
+Heart Related Chronic Diseases (involves 4 variables) -
+
+```{r HRCA-eval}
+indx <- c("ED Lev.1","ED Lev.2","ED Lev.3","ED Lev.4","ED Lev.5","ED Lev.6")
+var1 <- brfss2013 %>% filter(!is.na(educa),!is.na(HRCD),HRCD=="yes") %>%
+ group_by(educa,HRCD) %>% summarize(count_yes=n())
+var2 <- brfss2013 %>% filter(!is.na(educa),!is.na(HRCD),HRCD=="no") %>%
+ group_by(educa,HRCD) %>% summarize(count=n())
+HRCD_vs_educa <- var1 %>% mutate(count_no=count_yes)
+HRCD_vs_educa$count_no <- var2$count
+HRCD_vs_educa <- HRCD_vs_educa %>% mutate(tot_count=count_yes+count_no)
+HRCD_vs_educa <- HRCD_vs_educa %>% mutate(freq_yes=count_yes/tot_count)
+HRCD_vs_educa <- HRCD_vs_educa %>% mutate(freq_no=count_no/tot_count)
+barplot(HRCD_vs_educa$freq_yes,names.arg = indx,ylim=c(0.0,0.6),space=0,xlab="Eucation Level Index",ylab="Relative Frequency",main="Heart Related diseases vs Education Level")
+HRCD_vs_educa <- HRCD_vs_educa %>% mutate(perc_yes=freq_yes*100)
+HRCD_vs_educa[,c('educa','perc_yes')]
+```
+
+The chart shows an expected trend. There is a general decrease in percentage of people developing heart related diseases with increase in education level. Since it is well established that life style and food habits have a lot of impact on heart related diseases, people with higher education levels could be more aware of these habits and included them in their lifestyle. This is a generalizable result coming from a random sample. The relationship between the variables is only a negative association. No causation is implied here.
+
+
+**Research quesion 2:**
+
+Cancer (involves 3 variables) -
+
+```{r HC-eval}
+var1 <- brfss2013 %>% filter(!is.na(educa),!is.na(HC),HC=="yes") %>%
+ group_by(educa) %>% summarize(count_yes=n())
+var2 <- brfss2013 %>% filter(!is.na(educa),!is.na(HC),HC=="no") %>%
+ group_by(educa) %>% summarize(count_no=n())
+HC_vs_educa <- var1 %>% mutate(count_no=count_yes)
+HC_vs_educa$count_no=var2$count_no
+HC_vs_educa <- HC_vs_educa %>% mutate(tot_count=count_yes+count_no)
+HC_vs_educa <- HC_vs_educa %>% mutate(freq_yes=count_yes/tot_count)
+HC_vs_educa <- HC_vs_educa %>% mutate(freq_no=count_no/tot_count)
+barplot(HC_vs_educa$freq_yes,names.arg = indx,ylim=c(0.0,0.6),space=0,xlab="Eucation Level Index",ylab="Relative Frequency",main="Cancer vs Education Level")
+HC_vs_educa <- HC_vs_educa %>% mutate(perc_yes=freq_yes*100)
+HC_vs_educa[,c('educa','perc_yes')]
+```
+
+We see that percentage of people developing cancer remains mostly constant across education level with a slight dip in level 1 (never attended school or only kindergarten). There are two possible reasons for this trend, first, it is not fully established within scientific community if dietary or other daily habits have any impact on possibility of one developing cancer or not. The other explanation is presence of confounding variables like smoking etc. that have not been considered in this research.
+
+**Research quesion 3:**
+
+Depression (involves 2 variables)
+
+```{r Depression}
+var1 <- brfss2013 %>% filter(!is.na(educa),!is.na(addepev2),addepev2=="Yes") %>%
+ group_by(educa) %>% summarize(count_yes=n())
+var2 <- brfss2013 %>% filter(!is.na(educa),!is.na(addepev2),addepev2=="No") %>%
+ group_by(educa) %>% summarize(count_no=n())
+DEP_vs_educa <- var1 %>% mutate(count_no=count_yes)
+DEP_vs_educa$count_no <- var2$count_no
+DEP_vs_educa <- DEP_vs_educa %>% mutate(tot_count=count_yes+count_no)
+DEP_vs_educa <- DEP_vs_educa %>% mutate(freq_yes=count_yes/tot_count)
+DEP_vs_educa <- DEP_vs_educa %>% mutate(freq_no=count_no/tot_count)
+barplot(DEP_vs_educa$freq_yes,names.arg = indx,ylim=c(0.0,0.6),space=0,xlab="Eucation Level Index",ylab="Relative Frequency",main="Depression vs Education Level")
+DEP_vs_educa <- DEP_vs_educa %>% mutate(perc_yes=freq_yes*100)
+DEP_vs_educa[,c('educa','perc_yes')]
+```
+
+The plot shows that slightly higher percentage of people develop depression in mid education level segment (High School) than other education level segments. The difference is not too high in my opinion and should be checked for random or statistical error.
